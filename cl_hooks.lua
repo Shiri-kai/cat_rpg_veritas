@@ -1,85 +1,205 @@
-local PLUGIN = ix.plugin.Get("cat_rpg_veritas")
+local PLUGIN = PLUGIN
 
-ITEM.name = "Base Veritas Weapon"
-ITEM.description = "A base template for Veritas weapons."
-ITEM.category = "Veritas Weapons"
-ITEM.base = "base_weapons" -- inherit from Helix weapon base
-ITEM.isWeapon = true
-ITEM.weaponCategory = "primary" -- Uses default equip system
-ITEM.weaponTraits = {} -- Veritas-specific traits
-
-ITEM.veritasEquipSlot = "primary"
-
-function ITEM:GetWeaponTraits()
-	return self.weaponTraits or {}
-end
-
-function ITEM:GetDisplayTraits()
-	local lines = {}
-
-	if self.weaponTraits.Wounds then
-		table.insert(lines, self.weaponTraits.Wounds .. " Wounds")
-	end
-	if self.weaponTraits.ArmorPiercing then
-		table.insert(lines, self.weaponTraits.ArmorPiercing .. " AP")
-	end
-	if self.weaponTraits.AntiArmor then
-		table.insert(lines, "Anti-Armor +" .. self.weaponTraits.AntiArmor)
-	end
-	if self.weaponTraits.Shots then
-		table.insert(lines, self.weaponTraits.Shots .. " Shots")
-	end
-	if self.weaponTraits.Afterburn then
-		table.insert(lines, "Afterburn: " .. self.weaponTraits.Afterburn)
-	end
-	if self.weaponTraits.Brutal then
-		table.insert(lines, "Brutal: " .. self.weaponTraits.Brutal)
-	end
-	if self.weaponTraits.Nimble then
-		table.insert(lines, "Nimble: " .. self.weaponTraits.Nimble)
+net.Receive("ixVeritasOpenCharSheet", function()
+	if IsValid(ix.gui.charSheet) then
+		ix.gui.charSheet:Remove()
 	end
 
-	for trait, label in pairs({
-		Ranged = "Ranged",
-		Melee = "Melee",
-		CloseRanged = "Close-Ranged",
-		FarMelee = "Far-Melee",
-		Energy = "Energy",
-		Kinetic = "Kinetic",
-		Plasma = "Plasma",
-		Powered = "Powered",
-		Force = "Force (Psyker)",
-		Cooldown = "Cooldown",
-		CombiSlot = "Combi-Slot",
-	}) do
-		if self.weaponTraits[trait] then
-			table.insert(lines, label)
+	vgui.Create("ixVeritasCharSheet")
+end)
+
+net.Receive("ixVeritasOpenStatSetup", function()
+	if IsValid(ix.gui.setupStats) then
+		ix.gui.setupStats:Remove()
+	end
+
+	vgui.Create("ixVeritasSetupStats")
+end)
+
+net.Receive("ixVeritasSendCharSheet", function()
+	local target = net.ReadEntity()
+	local statTable = net.ReadTable()
+	local woundCount = net.ReadUInt(8)
+	local equippedText = net.ReadString()
+
+	local frame = vgui.Create("ixVeritasCharSheetViewer")
+	if IsValid(frame) then
+		frame:SetTitle("Viewing: " .. target:Nick())
+		frame:SetSheetData(target, statTable, woundCount, equippedText)
+	end
+end)
+
+
+-- Open the attacker selection panel
+net.Receive("ixVeritasOpenContestAttacker", function()
+	if IsValid(ix.gui.contestAttacker) then
+		ix.gui.contestAttacker:Remove()
+	end
+	vgui.Create("ixVeritasContestAttacker")
+end)
+
+-- Open the defender response panel
+net.Receive("ixVeritasOpenContestDefender", function()
+	local attackerName = net.ReadString()
+	local attackerID = net.ReadEntity()
+
+	if IsValid(ix.gui.contestDefender) then
+		ix.gui.contestDefender:Remove()
+	end
+
+	local panel = vgui.Create("ixVeritasContestDefender")
+	panel.attacker = attackerID
+	panel.attackerName = attackerName
+end)
+
+
+net.Receive("ixVeritasEditNpc", function()
+	local ent = net.ReadEntity()
+	if not IsValid(ent) then return end
+
+	local panel = vgui.Create("ixVeritasNpcEditor")
+	panel:SetEntity(ent)
+end)
+
+net.Receive("ixVeritasOpenNpcEditor", function()
+	local ent = net.ReadEntity()
+	if not IsValid(ent) then return end
+
+	if IsValid(LocalPlayer()._veritasNpcEditor) then
+		LocalPlayer()._veritasNpcEditor:MakePopup()
+		return
+	end
+
+	local panel = vgui.Create("ixVeritasNpcEditor")
+	panel:SetEntity(ent)
+	LocalPlayer()._veritasNpcEditor = panel
+
+	panel.OnClose = function()
+		if IsValid(LocalPlayer()) then
+			LocalPlayer()._veritasNpcEditor = nil
 		end
 	end
+end)
 
-	return table.concat(lines, "\n")
-end
+net.Receive("ixVeritasSyncInitiative", function()
+	initiativeQueue = net.ReadTable()
+	currentTurn = net.ReadUInt(8)
+end)
 
-function ITEM:GetDescription()
-	local desc = self.description or ""
+net.Receive("ixVeritasToggleInitiativeHud", function()
+	showInitiativeHud = net.ReadBool()
+end)
 
-	if self:GetData("equip") then
-		desc = desc .. "\n[Equipped]"
+hook.Add("HUDPaint", "ixVeritasDrawInitiative", function()
+	if not showInitiativeHud or not initiativeQueue or #initiativeQueue == 0 then return end
+
+	local x = 30
+	local y = ScrH() * 0.3
+	local spacing = 25
+
+	draw.SimpleText("Initiative Order", "Trebuchet24", x, y - spacing, color_white, 0, 0)
+
+	for i, entry in ipairs(initiativeQueue) do
+		local name = entry.name or "Unknown"
+		local roll = entry.roll or 0
+		local text = string.format("[%d] %s - %d", i, name, roll)
+
+		local isTurn = (i == currentTurn)
+		local color = isTurn and Color(0, 255, 0) or color_white
+
+		draw.SimpleText(text, "Trebuchet18", x, y + (i * spacing), color, 0, 0)
 	end
+end)
 
-	local traits = self:GetDisplayTraits()
-	if traits ~= "" then
-		desc = desc .. "\n\nTraits:\n" .. traits
-	end
+net.Receive("ixVeritasOpenAttackMenu", function()
+	vgui.Create("ixVeritasAttackMenu")
+end)
 
-	return desc
-end
+net.Receive("ixVeritasDefensePrompt", function()
+    local attacker = net.ReadEntity()
+    local callbackID = net.ReadUInt(8)
+    
+    -- Defensive fallback: get attacker name
+    local attackerName = IsValid(attacker) and (attacker:IsPlayer() and attacker:Nick() or attacker:GetClass()) or "Unknown"
 
-if CLIENT then
-	function ITEM:PaintOver(item, w, h)
-		if item:GetData("equip") then
-			surface.SetDrawColor(0, 255, 0, 100)
-			surface.DrawRect(w - 14, h - 14, 8, 8)
+    -- Delay to ensure entities are valid before building UI
+    timer.Simple(0, function()
+        if not IsValid(LocalPlayer()) then return end
+
+        if IsValid(ix.gui.contestDefender) then
+            ix.gui.contestDefender:Remove()
+        end
+
+        local frame = vgui.Create("ixVeritasDefenseMenu")
+        frame:SetCallbackID(callbackID)
+
+        -- Use new fallback-safe method
+        if IsValid(attacker) then
+            frame:SetAttacker(attacker)
+        else
+            frame:SetTitle("Defense vs " .. attackerName)
+        end
+
+        -- Save attackerName fallback to panel for later use
+        frame.attackerName = attackerName
+    end)
+end)
+
+net.Receive("ixVeritasCombatLog", function()
+	local raw = net.ReadString()
+	local lines = util.JSONToTable(raw) or {}
+
+	for _, line in ipairs(lines) do
+		local colorized = {}
+
+		-- Header
+		if string.StartWith(line, "[COMBAT]") or string.StartWith(line, "[CONTEST]") or string.StartWith(line, "[SKILL]") then
+			table.insert(colorized, Color(255, 255, 0)) -- Yellow
+			table.insert(colorized, line)
+
+		-- Hit landed
+		elseif string.find(line, "→ Hit landed") then
+			table.insert(colorized, Color(0, 255, 0))
+			table.insert(colorized, line)
+
+		-- Missed
+		elseif string.find(line, "→ Miss") then
+			table.insert(colorized, Color(255, 100, 100))
+			table.insert(colorized, line)
+
+		-- Blocked by Field
+		elseif string.find(line, "blocked by Field") then
+			table.insert(colorized, Color(100, 255, 255))
+			table.insert(colorized, line)
+
+		-- Summary
+		elseif string.StartWith(line, "Summary") then
+			table.insert(colorized, Color(255, 255, 0))
+			table.insert(colorized, line)
+
+		-- Damage totals
+		elseif string.StartWith(line, "Total Wounds Dealt") then
+			local wounds, mit, over = line:match("(%d+).-(%d+).-(%d+)")
+			table.insert(colorized, Color(255, 255, 255))
+			table.insert(colorized, "Total Wounds Dealt: ")
+
+			table.insert(colorized, Color(255, 150, 150)) table.insert(colorized, wounds)
+			table.insert(colorized, Color(255, 255, 255)) table.insert(colorized, " | Mitigated: ")
+			table.insert(colorized, Color(150, 150, 255)) table.insert(colorized, mit)
+			table.insert(colorized, Color(255, 255, 255)) table.insert(colorized, " | Overflow: ")
+			table.insert(colorized, Color(255, 255, 100)) table.insert(colorized, over)
+
+		-- Breakdown lines
+		elseif string.find(line, "Wound") then
+			table.insert(colorized, Color(200, 200, 255))
+			table.insert(colorized, line)
+
+		-- Everything else
+		else
+			table.insert(colorized, Color(200, 200, 200))
+			table.insert(colorized, line)
 		end
+
+		chat.AddText(unpack(colorized))
 	end
-end
+end)
