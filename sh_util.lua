@@ -268,6 +268,8 @@ function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, sh
 	shotCount = shotCount or 1
 	defBonus = defBonus or 0
 
+	print("[Veritas] ResolveCombat called: attacker =", attacker, "defender =", defender)
+	
 	-- If defender is a player and no defense stat/bonus is provided, prompt them
 	if defender:IsPlayer() and not defStat then
 		local callbackID = math.random(1, 254)

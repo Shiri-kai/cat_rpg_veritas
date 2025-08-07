@@ -430,10 +430,15 @@ net.Receive("ixVeritasSaveNpcData", function(len, client)
 		return
 	end
 
-	-- Apply to entity
-	ent:SetModel(model)
+	if not client:IsAdmin() then
+		client:Notify("You are not authorized to edit NPCs.")
+		return
+	end
+
+	-- Apply data
 	ent:SetNetVar("veritas_name", name)
 	ent:SetNetVar("veritas_model", model)
+	ent:SetModelPath(model)
 
 	for stat, values in pairs(statTable) do
 		ent:SetNetVar("veritas_stat_" .. stat, values.value)
@@ -441,14 +446,30 @@ net.Receive("ixVeritasSaveNpcData", function(len, client)
 	end
 
 	ent:SetNetVar("veritas_defense_stat", defenseStat)
-
-	-- Store traits
 	ent:SetNetVar("veritas_weapon", weaponTraits)
 	ent:SetNetVar("veritas_weapon_name", weaponName)
 	ent:SetNetVar("veritas_armor", armorTraits)
 
+	-- Apply model change
+	ent:SetModel(model)
+
+	-- Delay physics reinit to allow model load
+	timer.Simple(0.1, function()
+		if IsValid(ent) then
+			ent:PhysicsInit(SOLID_BBOX)
+			ent:SetSolid(SOLID_BBOX)
+			ent:SetMoveType(MOVETYPE_NONE)
+
+			local phys = ent:GetPhysicsObject()
+			if IsValid(phys) then
+				phys:EnableMotion(false)
+			end
+		end
+	end)
+
 	client:Notify("NPC data saved successfully.")
 end)
+
 
 
 
@@ -467,16 +488,32 @@ net.Receive("ixVeritasSubmitAttack", function(len, ply)
 	local bonus = net.ReadInt(16)
 	local slot = net.ReadString()
 
+	if not IsValid(target) then
+		ply:Notify("Invalid attack target.")
+		return
+	end
+
 	local char = ply:GetCharacter()
-	if not char or not IsValid(target) then return end
+	if not char then
+		ply:Notify("Your character is invalid.")
+		return
+	end
 
 	local plugin = ix.plugin.Get("cat_rpg_veritas")
-	if not plugin then return end
+	if not plugin then
+		ply:Notify("Veritas plugin not loaded.")
+		return
+	end
 
 	local inv = char:GetInventory()
+	if not inv then
+		ply:Notify("Inventory not found.")
+		return
+	end
+
 	local weaponItem
 
-	-- Look for the weapon in the requested equipSlot
+	-- Search for equipped weapon in the given slot
 	for _, item in pairs(inv:GetItems()) do
 		if item.isWeapon and item:GetData("equipSlot") == slot then
 			weaponItem = item
@@ -489,7 +526,11 @@ net.Receive("ixVeritasSubmitAttack", function(len, ply)
 		return
 	end
 
-	-- Finally, resolve combat with correct shotCount
+	-- Optional logging
+	print("[Veritas] Attack submitted by", ply:Nick(), "against", IsValid(target) and target:GetClass() or "INVALID")
+	print("  Stat:", stat, " | Bonus:", bonus, " | Shots:", shotCount)
+
+	-- Proceed to combat
 	plugin:ResolveCombat(ply, target, stat, nil, bonus, shotCount)
 end)
 

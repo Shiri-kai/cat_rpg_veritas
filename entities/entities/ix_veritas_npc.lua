@@ -19,6 +19,7 @@ if SERVER then
 	function ENT:Initialize()
 		local mdl = self:GetModelPath()
 
+		-- Use fallback model if invalid or missing
 		if not mdl or mdl == "" or mdl == "Error" or not file.Exists(mdl, "GAME") then
 			mdl = "models/Humans/Group01/male_07.mdl"
 			self:SetModelPath(mdl)
@@ -27,20 +28,21 @@ if SERVER then
 		self:SetModel(mdl)
 		self:SetNpcName(self:GetNpcName() or "Veritas NPC")
 
-		self:SetSolid(SOLID_VPHYSICS)
-		self:SetMoveType(MOVETYPE_VPHYSICS)
-		self:PhysicsInit(SOLID_VPHYSICS)
+		-- Use proper physics setup
+		self:PhysicsInit(SOLID_BBOX)
+		self:SetSolid(SOLID_BBOX)
+		self:SetMoveType(MOVETYPE_NONE)
+		self:SetUseType(SIMPLE_USE)
 
 		local phys = self:GetPhysicsObject()
 		if IsValid(phys) then
-			phys:Wake()
+			phys:EnableMotion(false)
 		end
 
 		self:SetIdleAnim()
 	end
 
 	function ENT:SetIdleAnim()
-		-- Try ACT_IDLE
 		local ok = self:ResetSequence(ACT_IDLE)
 
 		if not ok or self:GetSequence() <= 0 then
@@ -54,7 +56,6 @@ if SERVER then
 				end
 			end
 
-			-- Default to sequence 0 if nothing else
 			self:SetSequence(0)
 			self:SetPlaybackRate(0)
 		end
@@ -66,25 +67,14 @@ if SERVER then
 		return true
 	end
 
-	function ENT:Use(activator, caller)
-		if not IsValid(activator) or not activator:IsPlayer() then return end
-		if self._nextUse and self._nextUse > CurTime() then return end
-		self._nextUse = CurTime() + 0.5
 
-		net.Start("ixVeritasOpenNpcEditor")
-			net.WriteEntity(self)
-		net.Send(activator)
-	end
-
-	-- Allow admins to pick up with physgun
 	function ENT:PhysgunPickup(ply)
 		return ply:IsAdmin()
 	end
-	
+
 	function ENT:GetNpcName()
 		return self:GetNetVar("veritas_name") or self:GetNW2String("veritas_name", "Unnamed NPC")
 	end
-
 end
 
 -- CLIENT SIDE

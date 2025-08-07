@@ -23,7 +23,6 @@ function PANEL:Init()
 	self.statBox:SetValue("Choose Defense Stat")
 	self.statBox:AddChoice("RFLX")
 	self.statBox:AddChoice("TGHN")
-	self.statBox:AddChoice("WITS")
 
 	-- Bonus Entry
 	self.bonusEntry = self:Add("DNumberWang")
@@ -63,10 +62,13 @@ function PANEL:SetCallbackID(id)
 end
 
 function PANEL:SetAttacker(ent)
-	if IsValid(ent) then
-		self.attacker = ent
-		self:SetTitle("Defense vs " .. (ent:IsPlayer() and ent:Nick() or ent:GetClass()))
-	end
+    if IsValid(ent) then
+        self.attacker = ent
+        self:SetTitle("Defense vs " .. (ent:IsPlayer() and ent:Nick() or ent:GetClass()))
+    else
+        self:SetTitle("Incoming Attack")
+    end
 end
+
 
 vgui.Register("ixVeritasDefenseMenu", PANEL, "DFrame")

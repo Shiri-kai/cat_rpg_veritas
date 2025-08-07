@@ -461,3 +461,22 @@ ix.command.Add("NpcAttack", {
 		net.Send(client)
 	end
 })
+
+ix.command.Add("NpcEditor", {
+	description = "Open the Veritas NPC editor for the entity you're looking at.",
+	adminOnly = true,
+	OnRun = function(self, client)
+		local trace = client:GetEyeTrace()
+		local ent = trace.Entity
+
+		if not IsValid(ent) or ent:GetClass() ~= "ix_veritas_npc" then
+			return "You must be looking at a Veritas NPC."
+		end
+
+		net.Start("ixVeritasOpenNpcEditor")
+			net.WriteEntity(ent)
+		net.Send(client)
+
+		client:Notify("Opening NPC editor...")
+	end
+})
