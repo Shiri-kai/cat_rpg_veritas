@@ -1,3 +1,20 @@
+local PLUGIN = PLUGIN
+
+-- Helper: get PA boost for a given target+stat
+local function GetPABoostForStat(target, stat)
+	if not IsValid(target) then return 0 end
+	if not PLUGIN or not PLUGIN.GetPowerArmorBoost then return 0 end
+
+	local ok, boost = pcall(PLUGIN.GetPowerArmorBoost, PLUGIN, target, stat)
+	if ok and tonumber(boost) then
+		boost = math.floor(boost)
+		if (stat == "strn" or stat == "tghn") and boost > 0 then
+			return boost
+		end
+	end
+	return 0
+end
+
 local PANEL = {}
 
 function PANEL:Init()
@@ -11,10 +28,16 @@ function PANEL:Init()
 end
 
 function PANEL:SetSheetData(target, statData, woundCount, equippedText)
-	for _, stat in ipairs(ix.plugin.Get("cat_rpg_veritas").veritasStats) do
-		local statEntry = statData[stat]
-		local value = statEntry and statEntry.value or 5
-		local grade = statEntry and statEntry.grade or 1
+	local statsList = PLUGIN and PLUGIN.veritasStats or { "strn","rflx","tghn","intl","tech","prsn","wyrd" }
+
+	for _, stat in ipairs(statsList) do
+		local entry = statData and statData[stat] or {}
+		local value = tonumber(entry.value) or 5
+
+		local grade = tonumber(entry.grade) or 1
+
+		local paBoost = tonumber(entry.boost) or GetPABoostForStat(target, stat)
+		local paNote = (paBoost > 0) and (" (+%d PA)"):format(paBoost) or ""
 
 		local row = self.scroll:Add("DPanel")
 		row:Dock(TOP)
@@ -26,11 +49,11 @@ function PANEL:SetSheetData(target, statData, woundCount, equippedText)
 		end
 
 		local label = row:Add("DLabel")
-		label:SetText(stat:upper() .. ": " .. value .. " (Grade " .. grade .. ")")
 		label:Dock(LEFT)
-		label:SetWide(300)
+		label:SetWide(320)
 		label:SetFont("DermaDefaultBold")
 		label:DockMargin(10, 0, 0, 0)
+		label:SetText(("%s: %d (Grade %d%s)"):format(stat:upper(), value, grade, paNote))
 	end
 
 	if woundCount then

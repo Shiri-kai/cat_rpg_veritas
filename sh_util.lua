@@ -196,69 +196,58 @@ function PLUGIN:DoCombatRoll(ent, stat, bonus)
 end
 
 function PLUGIN:MitigateTotalDamage(totalWounds, weaponTraits, armorTraits)
-	local ap = weaponTraits.ArmorPiercing or 0
-	local aa = weaponTraits.AntiArmor or 0
+    weaponTraits = weaponTraits or {}
+    armorTraits = armorTraits or {}
 
-	local sp = armorTraits.StoppingPower or 0
-	local specialized = armorTraits.SpecializedProtection or {}
-	local damageType = nil
+    local ap = weaponTraits.ArmorPiercing or 0
+    local aa = weaponTraits.AntiArmor or 0
 
-	-- Detect damage type
-	for k in pairs(weaponTraits) do
-		if k == "Kinetic" or k == "Energy" or k == "Plasma" then
-			damageType = k
-			break
-		end
-	end
+    local sp = armorTraits.StoppingPower or 0
+    local specialized = istable(armorTraits.SpecializedProtection) and armorTraits.SpecializedProtection or {}
+    local damageType = nil
 
-	if damageType and specialized[damageType] then
-		sp = sp + specialized[damageType]
-	end
+    -- Detect damage type once
+    for k in pairs(weaponTraits) do
+        if k == "Kinetic" or k == "Energy" or k == "Plasma" then
+            damageType = k
+            break
+        end
+    end
 
-	local effectiveSP = math.max(0, sp - ap)
+    if damageType and specialized[damageType] then
+        sp = sp + (tonumber(specialized[damageType]) or 0)
+    end
 
-	-- Extreme Protection: all mitigated
-	if armorTraits.ExtremeProtection then
-		return {
-			total = totalWounds,
-			mitigated = totalWounds,
-			overflow = 0,
-			fieldBlocked = false
-		}
-	end
+    local effectiveSP = math.max(0, sp - ap)
 
-	-- Field block check (this blocks *everything* if it procs)
-	if armorTraits.Field then
-		local chance = armorTraits.Field.chance or 0
-		local uses = armorTraits.Field.uses or 0
+    -- Extreme Protection: all mitigated
+    if armorTraits.ExtremeProtection then
+        return { total = totalWounds, mitigated = totalWounds, overflow = 0, fieldBlocked = false }
+    end
 
-		if uses > 0 and math.random(1, 100) <= chance then
-			armorTraits.Field.uses = uses - 1
-			return {
-				total = totalWounds,
-				mitigated = totalWounds,
-				overflow = 0,
-				fieldBlocked = true
-			}
-		end
-	end
+    -- Field block check
+    local field = armorTraits.Field
+    if istable(field) then
+        local chance = tonumber(field.chance) or 0
+        local uses = tonumber(field.uses) or 0
 
-	-- Final calculation
-	local overflow = math.max(0, totalWounds - effectiveSP)
-	local mitigated = totalWounds - overflow
+        if uses > 0 and math.random(1, 100) <= chance then
+            field.uses = uses - 1
+            return { total = totalWounds, mitigated = totalWounds, overflow = 0, fieldBlocked = true }
+        end
+    end
 
-	-- Apply Anti-Armor bonus (adds to mitigated side)
-	if aa > 0 then
-		mitigated = math.min(totalWounds, mitigated + aa)
-		overflow = totalWounds - mitigated
-	end
+    -- Final calculation
+    local overflow = math.max(0, totalWounds - effectiveSP)
+    local mitigated = totalWounds - overflow
 
-	return {
-		total = totalWounds,
-		mitigated = mitigated,
-		overflow = overflow,
-		fieldBlocked = false
-	}
+    -- Anti-Armor shifts mitigation up to the total cap
+    if aa > 0 then
+        mitigated = math.min(totalWounds, mitigated + aa)
+        overflow = totalWounds - mitigated
+    end
+
+    return { total = totalWounds, mitigated = mitigated, overflow = overflow, fieldBlocked = false }
 end
 
 
@@ -348,9 +337,9 @@ function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, sh
 
 		-- Trait-based wound multiplier
 		if weaponTraits.Brutal and atkStat == "strn" then
-			multiplier = math.max(1, math.floor(atkRoll.total / weaponTraits.Brutal))
+			multiplier = math.max(1, math.floor((atkRoll.total / weaponTraits.Brutal) + 1))
 		elseif weaponTraits.Nimble and atkStat == "rflx" then
-			multiplier = math.max(1, math.floor(atkRoll.total / weaponTraits.Nimble))
+			multiplier = math.max(1, math.floor((atkRoll.total / weaponTraits.Nimble) + 1))
 		end
 
 		local hitWoundBreakdown = {}
@@ -544,6 +533,11 @@ function PLUGIN:AnnounceCombatResults(data)
 		))
 	end
 
+	-- Log to console
+    if SERVER and PLUGIN and PLUGIN.LogLines then
+        PLUGIN:LogLines(lines)
+    end
+
 	-- Send to nearby players
 	for _, ply in ipairs(player.GetAll()) do
 		if IsValid(ply) and (
@@ -569,5 +563,29 @@ function PLUGIN:GetPowerArmorBoost(ply, stat)
 	if stat ~= "strn" and stat ~= "tghn" then return 0 end
 
 	return tonumber(data.PowerArmor) or 0
+end
+
+function PLUGIN:RefillField(ent)
+    local armor = self:GetEquippedArmor(ent)
+    if not armor then return false end
+
+    local traits = armor.GetArmorData and armor:GetArmorData()
+    if not istable(traits) or not istable(traits.Field) then return false end
+
+    local f = traits.Field
+    local max = tonumber(f.maxUses) or tonumber(f.uses) or 0
+    if max <= 0 then return false end
+
+    if f.uses < max then
+        f.uses = max
+        if SERVER then
+            if ent:IsPlayer() then
+                ent:Notify("Your Field has recharged.")
+            end
+        end
+        return true
+    end
+
+    return false
 end
 

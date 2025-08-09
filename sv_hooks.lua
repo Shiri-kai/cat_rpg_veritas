@@ -35,6 +35,17 @@ function PLUGIN:CharacterCreated(client, character)
 	end
 end
 
+-- Server console/file logging helper
+function PLUGIN:LogLines(lines, prefix)
+    prefix = prefix or "[Veritas]"
+    if type(lines) == "string" then lines = { lines } end
+    for _, line in ipairs(lines or {}) do
+        local out = string.format("%s %s", prefix, tostring(line))
+        print(out)                 -- shows in live console
+        ServerLog(out .. "\n")     -- writes to server log file
+    end
+end
+
 net.Receive("ixVeritasRequestCharSheet", function(_, ply)
 	local target = net.ReadEntity()
 
@@ -45,10 +56,16 @@ net.Receive("ixVeritasRequestCharSheet", function(_, ply)
 
 	local data = {}
 	for _, stat in ipairs(PLUGIN.veritasStats) do
-		data[stat] = {
-			value = char:GetData("veritas_" .. stat, 5),
-			grade = char:GetData("veritas_grade_" .. stat, 1)
-		}
+    	local baseValue = char:GetData("veritas_" .. stat, 5)
+    	local baseGrade = char:GetData("veritas_grade_" .. stat, 1)
+   		local boost = PLUGIN:GetPowerArmorBoost(target, stat) -- target is the player whose sheet we’re viewing
+    	local effectiveGrade = math.min(baseGrade + (boost or 0), 10)
+
+    	data[stat] = {
+        	value = baseValue,
+        	grade = effectiveGrade,
+			boost = boost or 0
+    	}
 	end
 
 	local wounds = char:GetData("wounds", 3 + math.floor(char:GetData("veritas_tghn", 5) / 10))
@@ -95,7 +112,7 @@ net.Receive("ixVeritasRollStat", function(_, ply)
 	local value = char:GetData("veritas_" .. stat, 5)
 	local roll = math.random(1, 100)
 	local total = value + roll
-	local grade = char:GetData("veritas_grade_" .. stat, 1)
+	local grade = PLUGIN:GetCharacterGrade(ply, stat)
 
 	local output = {
 		string.format("[SKILL] %s rolls %s → d100(%d) + Stat(%d) = %d [Grade: %d]", ply:Nick(), stat:upper(), roll, value, total, grade)
@@ -108,6 +125,8 @@ net.Receive("ixVeritasRollStat", function(_, ply)
 			net.Send(v)
 		end
 	end
+
+	PLUGIN:LogLines(output, "[Veritas][SKILL]")
 end)
 
 net.Receive("ixVeritasSubmitStats", function(len, ply)
@@ -180,14 +199,14 @@ net.Receive("ixVeritasContestSend", function(len, ply)
 		local aBonus = bonus or 0
 		local aRaw = math.random(1, 100)
 		local aBase = attackerChar:GetData("veritas_" .. aStat, 5)
-		local aGrade = attackerChar:GetData("veritas_grade_" .. aStat, 1)
+		local aGrade = PLUGIN:GetCharacterGrade(attacker, aStat)
 		local aInitial = aRaw + aBase + aBonus
 
 		local dStat = defenderStat
 		local dBonus = defenderBonus
 		local dRaw = math.random(1, 100)
 		local dBase = defender:GetNetVar("veritas_stat_" .. dStat, 5)
-		local dGrade = defender:GetNetVar("veritas_grade_" .. dStat, 1)
+		local dGrade = PLUGIN:GetCharacterGrade(defender, dStat)
 		local dInitial = dRaw + dBase + dBonus
 
 		local aFinal, dFinal = aInitial, dInitial
@@ -238,6 +257,8 @@ net.Receive("ixVeritasContestSend", function(len, ply)
 			end
 		end
 
+		PLUGIN:LogLines(output, "[Veritas][CONTEST]")
+
 		attacker.contestPending = nil
 	end
 end)
@@ -265,7 +286,7 @@ net.Receive("ixVeritasContestResolve", function(_, ply)
 		local dBonus = defenderBonus or 0
 		local dRaw = math.random(1, 100)
 		local dBase = ply:GetCharacter():GetData("veritas_" .. dStat, 5)
-		local dGrade = ply:GetCharacter():GetData("veritas_grade_" .. dStat, 1)
+		local dGrade = PLUGIN:GetCharacterGrade(ply, dStat)
 		local dInitial = dRaw + dBase + dBonus
 
 		local aFinal, dFinal = aInitial, dInitial
@@ -313,6 +334,8 @@ net.Receive("ixVeritasContestResolve", function(_, ply)
 			end
 		end
 
+		PLUGIN:LogLines(output, "[Veritas][CONTEST]")
+
 		ply.gmContest = nil
 		return
 	end
@@ -340,7 +363,7 @@ net.Receive("ixVeritasContestResolve", function(_, ply)
 	local aBonus = attacker.contestPending.bonus or 0
 	local aRaw = math.random(1, 100)
 	local aBase = attackerChar:GetData("veritas_" .. aStat, 5)
-	local aGrade = attackerChar:GetData("veritas_grade_" .. aStat, 1)
+	local aGrade = PLUGIN:GetCharacterGrade(attacker, aStat)
 	local aInitial = aRaw + aBase + aBonus
 
 	local dStat = defenderStat
@@ -350,12 +373,12 @@ net.Receive("ixVeritasContestResolve", function(_, ply)
 
 	if isNPC then
 		dBase = defender:GetNetVar("veritas_stat_" .. dStat, 5)
-		dGrade = defender:GetNetVar("veritas_grade_" .. dStat, 1)
+		dGrade = PLUGIN:GetCharacterGrade(defender, dStat)
 	else
 		local defenderChar = defender:GetCharacter()
 		if not defenderChar then return end
 		dBase = defenderChar:GetData("veritas_" .. dStat, 5)
-		dGrade = defenderChar:GetData("veritas_grade_" .. dStat, 1)
+		dGrade = PLUGIN:GetCharacterGrade(defender, dStat)
 	end
 
 	local dInitial = dRaw + dBase + dBonus
@@ -410,6 +433,8 @@ net.Receive("ixVeritasContestResolve", function(_, ply)
 		end
 	end
 
+	PLUGIN:LogLines(output, "[Veritas][CONTEST]")
+
 	attacker.contestPending = nil
 end)
 
@@ -448,7 +473,15 @@ net.Receive("ixVeritasSaveNpcData", function(len, client)
 	ent:SetNetVar("veritas_defense_stat", defenseStat)
 	ent:SetNetVar("veritas_weapon", weaponTraits)
 	ent:SetNetVar("veritas_weapon_name", weaponName)
+
+	local f = armorTraits.Field
+	if istable(f) then
+   		f.chance = tonumber(f.chance) or 0
+    	f.uses = tonumber(f.uses) or 0
+    	f.maxUses = tonumber(f.maxUses) or f.uses
+	end
 	ent:SetNetVar("veritas_armor", armorTraits)
+
 
 	-- Apply model change
 	ent:SetModel(model)

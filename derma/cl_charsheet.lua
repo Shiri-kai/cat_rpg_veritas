@@ -1,5 +1,20 @@
 local PLUGIN = PLUGIN
 
+-- Helper: get PA boost for a given player+stat (safe clientside)
+local function GetPABoostForStat(target, stat)
+	if not IsValid(target) then return 0 end
+	if not PLUGIN or not PLUGIN.GetPowerArmorBoost then return 0 end
+
+	local ok, boost = pcall(PLUGIN.GetPowerArmorBoost, PLUGIN, target, stat)
+	if ok and tonumber(boost) then
+		boost = math.floor(boost)
+		if (stat == "strn" or stat == "tghn") and boost > 0 then
+			return boost
+		end
+	end
+	return 0
+end
+
 local PANEL = {}
 
 function PANEL:Init()
@@ -8,15 +23,21 @@ function PANEL:Init()
 	self:SetTitle("Character Sheet")
 	self:MakePopup()
 
-	local char = LocalPlayer():GetCharacter()
+	local ply = LocalPlayer()
+	local char = IsValid(ply) and ply:GetCharacter()
 
 	-- Scroll panel for stats
 	self.scroll = self:Add("DScrollPanel")
 	self.scroll:Dock(FILL)
 
 	for _, stat in ipairs(PLUGIN.veritasStats) do
-		local statValue = char:GetData("veritas_" .. stat, 5)
-		local grade = char:GetData("veritas_grade_" .. stat, 1)
+		local baseValue = char and char:GetData("veritas_" .. stat, 5) or 5
+		local baseGrade = char and char:GetData("veritas_grade_" .. stat, 1) or 1
+
+		-- PA boost + effective grade
+		local paBoost = GetPABoostForStat(ply, stat)
+		local effectiveGrade = math.min(baseGrade + paBoost, 10)
+		local paNote = (paBoost > 0) and (" (+%d PA)"):format(paBoost) or ""
 
 		local row = self.scroll:Add("DPanel")
 		row:Dock(TOP)
@@ -28,11 +49,11 @@ function PANEL:Init()
 		end
 
 		local label = row:Add("DLabel")
-		label:SetText(stat:upper() .. ": " .. statValue .. " (Grade " .. grade .. ")")
 		label:Dock(LEFT)
-		label:SetWide(220)
+		label:SetWide(260)
 		label:SetFont("DermaDefaultBold")
 		label:DockMargin(10, 0, 0, 0)
+		label:SetText(("%s: %d (Grade %d%s)"):format(stat:upper(), baseValue, effectiveGrade, paNote))
 
 		local rollButton = row:Add("DButton")
 		rollButton:Dock(RIGHT)
@@ -46,7 +67,7 @@ function PANEL:Init()
 	end
 
 	-- Wound display
-	local wounds = char:GetData("wounds", 3 + math.floor(char:GetData("veritas_tghn", 5) / 10))
+	local wounds = 3 + math.floor((char and char:GetData("veritas_tghn", 5) or 5) / 10)
 
 	local woundLabel = self:Add("DLabel")
 	woundLabel:SetText("Max Wounds: " .. wounds)
@@ -56,8 +77,7 @@ function PANEL:Init()
 	woundLabel:SetTall(25)
 
 	-- Equipped items display
-	local inv = char:GetInventory()
-
+	local inv = char and char:GetInventory()
 	local slotMap = {
 		["primary"] = "Primary Weapon",
 		["secondary"] = "Secondary Weapon",
@@ -67,7 +87,6 @@ function PANEL:Init()
 	}
 
 	local equippedBySlot = {}
-
 	if inv then
 		for _, item in pairs(inv:GetItems()) do
 			local slot = item:GetData("equipSlot")
@@ -78,10 +97,9 @@ function PANEL:Init()
 	end
 
 	local equippedText = ""
-
-	for slot, label in pairs(slotMap) do
+	for slot, nice in pairs(slotMap) do
 		local itemName = equippedBySlot[slot] or "None"
-		equippedText = equippedText .. label .. ": " .. itemName .. "\n"
+		equippedText = equippedText .. nice .. ": " .. itemName .. "\n"
 	end
 
 	local equippedList = self:Add("DLabel")

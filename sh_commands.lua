@@ -210,6 +210,10 @@ ix.command.Add("RollStat", {
 				v:ChatPrint(msg)
 			end
 		end
+		
+		if SERVER and PLUGIN and PLUGIN.LogLines then
+            PLUGIN:LogLines({ msg }, "[Veritas][SKILL]")
+        end
 	end
 })
 
@@ -290,6 +294,11 @@ ix.command.Add("RollInitiative", {
 		PLUGIN:SyncInitiative()
 
 		client:Notify("You rolled " .. roll .. " + " .. bonus .. " = " .. total .. " initiative.")
+
+		if SERVER and PLUGIN and PLUGIN.LogLines then
+            local line = string.format("%s rolled INIT: d100(%d) + %d = %d", client:Nick(), roll, bonus, total)
+            PLUGIN:LogLines({ line }, "[Veritas][INIT]")
+        end
 	end
 })
 
@@ -314,6 +323,11 @@ ix.command.Add("NpcInitiative", {
 		end)
 		PLUGIN:SyncInitiative()
 		client:Notify("NPC '" .. name .. "' rolled " .. roll .. " + " .. bonus .. " = " .. total .. " initiative.")
+
+		if SERVER and PLUGIN and PLUGIN.LogLines then
+            local line = string.format("NPC '%s' rolled INIT: d100(%d) + %d = %d", name, roll, bonus, total)
+            PLUGIN:LogLines({ line }, "[Veritas][INIT]")
+        end
 	end
 })
 
@@ -479,4 +493,35 @@ ix.command.Add("NpcEditor", {
 
 		client:Notify("Opening NPC editor...")
 	end
+})
+
+ix.command.Add("RechargeField", {
+    description = "Recharge your equipped armor's Field uses to full.",
+    OnRun = function(self, client)
+        local plugin = ix.plugin.Get("cat_rpg_veritas")
+        if not plugin then return "Plugin missing." end
+        if plugin:RefillField(client) then
+            return "Field recharged."
+        else
+            return "No Field to recharge (or already full)."
+        end
+    end
+})
+
+ix.command.Add("RechargeFieldTarget", {
+    description = "Admin: Recharge a player's Field.",
+    adminOnly = true,
+    arguments = { ix.type.character },
+    OnRun = function(self, client, targetChar)
+        local ply = targetChar:GetPlayer()
+        if not IsValid(ply) then return "Player not found." end
+        local plugin = ix.plugin.Get("cat_rpg_veritas")
+        if not plugin then return "Plugin missing." end
+        if plugin:RefillField(ply) then
+            client:Notify("Recharged Field for " .. ply:Nick() .. ".")
+            ply:Notify("Your Field has been recharged by an admin.")
+        else
+            client:Notify("Target has no Field (or already full).")
+        end
+    end
 })

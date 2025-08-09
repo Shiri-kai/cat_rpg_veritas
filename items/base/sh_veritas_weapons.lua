@@ -5,10 +5,18 @@ ITEM.description = "A base template for Veritas weapons."
 ITEM.category = "Veritas Weapons"
 ITEM.base = "base_weapons" -- inherit from Helix weapon base
 ITEM.isWeapon = true
-ITEM.weaponCategory = "primary" -- Uses default equip system
+
+-- Default slot (can be overridden in individual weapons)
+ITEM.weaponSlot = "primary"
+ITEM.weaponCategory = ITEM.weaponSlot -- sync for Helix
 ITEM.weaponTraits = {} -- Veritas-specific traits
 
-ITEM.veritasEquipSlot = "primary"
+-- Ensure slot is synced for Helix when the item loads
+function ITEM:OnInstanced()
+	if self.weaponSlot then
+		self.weaponCategory = self.weaponSlot
+	end
+end
 
 function ITEM:GetWeaponTraits()
 	return self.weaponTraits or {}
@@ -16,29 +24,35 @@ end
 
 function ITEM:GetDisplayTraits()
 	local lines = {}
+	local wt = self:GetWeaponTraits()
 
-	if self.weaponTraits.Wounds then
-		table.insert(lines, self.weaponTraits.Wounds .. " Wounds")
+	-- Numeric traits
+	if wt.Wounds then
+		table.insert(lines, wt.Wounds .. " Wounds")
 	end
-	if self.weaponTraits.ArmorPiercing then
-		table.insert(lines, self.weaponTraits.ArmorPiercing .. " AP")
+	if wt.ArmorPiercing then
+		table.insert(lines, wt.ArmorPiercing .. " AP")
 	end
-	if self.weaponTraits.AntiArmor then
-		table.insert(lines, "Anti-Armor +" .. self.weaponTraits.AntiArmor)
+	if wt.AntiArmor then
+		table.insert(lines, "Anti-Armor +" .. wt.AntiArmor)
 	end
-	if self.weaponTraits.Shots then
-		table.insert(lines, self.weaponTraits.Shots .. " Shots")
+	if wt.Shots then
+		table.insert(lines, wt.Shots .. " Shots")
 	end
-	if self.weaponTraits.Afterburn then
-		table.insert(lines, "Afterburn: " .. self.weaponTraits.Afterburn)
+	if wt.Afterburn then
+		table.insert(lines, "Afterburn: " .. wt.Afterburn)
 	end
-	if self.weaponTraits.Brutal then
-		table.insert(lines, "Brutal: " .. self.weaponTraits.Brutal)
+	if wt.Brutal then
+		table.insert(lines, "Brutal: " .. wt.Brutal)
 	end
-	if self.weaponTraits.Nimble then
-		table.insert(lines, "Nimble: " .. self.weaponTraits.Nimble)
+	if wt.Nimble then
+		table.insert(lines, "Nimble: " .. wt.Nimble)
+	end
+	if wt.Blast then
+		table.insert(lines, "Blast " .. wt.Blast)
 	end
 
+	-- Boolean traits
 	for trait, label in pairs({
 		Ranged = "Ranged",
 		Melee = "Melee",
@@ -52,7 +66,7 @@ function ITEM:GetDisplayTraits()
 		Cooldown = "Cooldown",
 		CombiSlot = "Combi-Slot",
 	}) do
-		if self.weaponTraits[trait] then
+		if wt[trait] then
 			table.insert(lines, label)
 		end
 	end
@@ -64,7 +78,7 @@ function ITEM:GetDescription()
 	local desc = self.description or ""
 
 	if self:GetData("equip") then
-		desc = desc .. "\n[Equipped]"
+		desc = desc .. "\n[Equipped as: " .. (self.weaponSlot or "unknown") .. "]"
 	end
 
 	local traits = self:GetDisplayTraits()
@@ -73,6 +87,17 @@ function ITEM:GetDescription()
 	end
 
 	return desc
+end
+
+function ITEM:OnEquipWeapon(client, weapon)
+    local char = client:GetCharacter()
+    if char then
+        self:SetData("equipSlot", self.weaponSlot) -- match RPG system
+    end
+end
+
+function ITEM:OnUnequipWeapon(client, weapon)
+    self:SetData("equipSlot", nil)
 end
 
 if CLIENT then
