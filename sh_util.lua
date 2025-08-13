@@ -159,6 +159,58 @@ function PLUGIN:GetEquippedWeapon(ent)
 	end
 end
 
+local function GetWeaponDisplayName(weaponObj, attacker)
+	-- Try common sources in order
+	local n
+	if weaponObj then
+		if istable(weaponObj) then
+			if weaponObj.GetName then n = weaponObj:GetName() end
+			n = n or weaponObj.name or weaponObj.PrintName
+		end
+	end
+
+	-- If empty or not a string, build a sensible default
+	if not isstring(n) or n:Trim() == "" then
+		if IsValid(attacker) then
+			if attacker:IsPlayer() then
+				-- Player’s weapon fallback
+				n = "Weapon"
+			else
+				-- NPC fallback with name/class
+				local base = (attacker.GetNpcName and attacker:GetNpcName())
+					or attacker:GetClass()
+					or "NPC"
+				n = base .. "'s Weapon"
+			end
+		else
+			n = "Weapon"
+		end
+	end
+
+	return n
+end
+
+function PLUGIN:GetEquippedWeaponBySlot(ent, slot)
+	if not IsValid(ent) then return end
+	if not slot or slot == "" then
+		return self:GetEquippedWeapon(ent)
+	end
+
+	if ent:IsPlayer() then
+		local inv = ent:GetCharacter():GetInventory()
+		if inv then
+			for _, item in pairs(inv:GetItems()) do
+				if item.isWeapon and item:GetData("equipSlot") == slot then
+					return item
+				end
+			end
+		end
+	elseif ent:GetClass() == "ix_veritas_npc" then
+		-- NPCs don't have multiple slots; fall back to their single weapon
+		return self:GetEquippedWeapon(ent)
+	end
+end
+
 function PLUGIN:GetEquippedArmor(ent)
 	if ent:IsPlayer() then
 		local inv = ent:GetCharacter():GetInventory()
@@ -252,7 +304,7 @@ end
 
 
 
-function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, shotCount, defBonus)
+function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, shotCount, defBonus, atkSlot)
 	atkBonus = atkBonus or 0
 	shotCount = shotCount or 1
 	defBonus = defBonus or 0
@@ -269,7 +321,8 @@ function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, sh
 			defender = defender,
 			attackStat = atkStat,
 			attackBonus = atkBonus,
-			shotCount = shotCount
+			shotCount = shotCount,
+			atkSlot = atkSlot
 		}
 
 		net.Start("ixVeritasDefensePrompt")
@@ -280,7 +333,7 @@ function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, sh
 		return -- Wait for response
 	end
 
-	local weapon = self:GetEquippedWeapon(attacker)
+	local weapon = self:GetEquippedWeaponBySlot(attacker, atkSlot) or self:GetEquippedWeapon(attacker)
 	local armor = self:GetEquippedArmor(defender)
 
 	if not weapon then
@@ -388,11 +441,13 @@ function PLUGIN:ResolveCombat(attacker, defender, atkStat, defStat, atkBonus, sh
 
 	-- Apply armor mitigation
 	local mitigation = self:MitigateTotalDamage(totalWounds, weaponTraits, armorTraits)
+	local weaponDisplayName = GetWeaponDisplayName(weapon, attacker)
 
 	local resultData = {
 		attackerEntity = attacker,
 		defenderEntity = defender,
 		weapon = weapon,
+		weaponName = weaponDisplayName,
 		shotCount = shotCount,
 		allRolls = allRolls,
 		hitCount = hitCount,
@@ -421,7 +476,8 @@ function PLUGIN:AnnounceCombatResults(data)
 		defender:IsPlayer() and defender:Nick() or (defender.GetNpcName and defender:GetNpcName()) or defender:GetClass()
 	) or "Unknown Defender"
 
-	local weaponName = (data.weapon and data.weapon.name) or "Weapon"
+	-- Broken?  local weaponName = (data.weapon and data.weapon.name) or "Weapon"
+	local weaponName = data.weaponName or GetWeaponDisplayName(data.weapon, attacker)
 
 	local lines = {}
 	table.insert(lines, string.format("[COMBAT] %s attacks %s with %s (%d attack%s)",

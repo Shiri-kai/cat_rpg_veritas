@@ -120,9 +120,17 @@ ix.command.Add("StatSet", {
 			return "Invalid stat."
 		end
 
-		value = math.Clamp(value, 0, 100)
-		targetChar:SetData("veritas_" .. stat, value)
-		client:Notify("Set " .. stat:upper() .. " to " .. value .. " for " .. targetChar:GetName())
+		local old = targetChar:GetData("veritas_" .. stat, 5)
+		local new = math.Clamp(value, 0, 100)
+		targetChar:SetData("veritas_" .. stat, new)
+
+		local targetPly = targetChar:GetPlayer()
+		local msg = string.format("%s %s set from %d to %d", stat:upper(), "value", old, new)
+
+		client:Notify(("Set %s for %s: %d → %d"):format(stat:upper(), targetChar:GetName(), old, new))
+		if IsValid(targetPly) then
+			targetPly:Notify(("Your %s was set: %d → %d"):format(stat:upper(), old, new))
+		end
 	end
 })
 
@@ -136,11 +144,15 @@ ix.command.Add("StatAdd", {
 			return "Invalid stat."
 		end
 
-		local current = targetChar:GetData("veritas_" .. stat, 5)
-		local new = math.Clamp(current + amount, 0, 100)
+		local old = targetChar:GetData("veritas_" .. stat, 5)
+		local new = math.Clamp(old + amount, 0, 100)
 		targetChar:SetData("veritas_" .. stat, new)
 
-		client:Notify("Set " .. stat:upper() .. " to " .. new .. " for " .. targetChar:GetName())
+		local targetPly = targetChar:GetPlayer()
+		client:Notify(("Adjusted %s for %s: %d → %d ( %+d )"):format(stat:upper(), targetChar:GetName(), old, new, amount))
+		if IsValid(targetPly) then
+			targetPly:Notify(("Your %s was adjusted: %d → %d ( %+d )"):format(stat:upper(), old, new, amount))
+		end
 	end
 })
 
@@ -154,9 +166,15 @@ ix.command.Add("GradeSet", {
 			return "Invalid stat."
 		end
 
-		value = math.Clamp(value, 1, 10)
-		targetChar:SetData("veritas_grade_" .. stat, value)
-		client:Notify("Set grade of " .. stat:upper() .. " to " .. value .. " for " .. targetChar:GetName())
+		local old = targetChar:GetData("veritas_grade_" .. stat, 1)
+		local new = math.Clamp(value, 1, 10)
+		targetChar:SetData("veritas_grade_" .. stat, new)
+
+		local targetPly = targetChar:GetPlayer()
+		client:Notify(("Set %s grade for %s: %d → %d"):format(stat:upper(), targetChar:GetName(), old, new))
+		if IsValid(targetPly) then
+			targetPly:Notify(("Your %s grade was set: %d → %d"):format(stat:upper(), old, new))
+		end
 	end
 })
 
@@ -170,11 +188,18 @@ ix.command.Add("GradeAdd", {
 			return "Invalid stat."
 		end
 
-		local current = targetChar:GetData("veritas_grade_" .. stat, PLUGIN:GetStatGrade(targetChar:GetData("veritas_" .. stat, 5)))
-		local new = math.Clamp(current + amount, 1, 10)
+		local baseStat = targetChar:GetData("veritas_" .. stat, 5)
+		local defaultGrade = (PLUGIN.GetStatGrade and PLUGIN:GetStatGrade(baseStat)) or 1
+
+		local old = targetChar:GetData("veritas_grade_" .. stat, defaultGrade)
+		local new = math.Clamp(old + amount, 1, 10)
 		targetChar:SetData("veritas_grade_" .. stat, new)
 
-		client:Notify("Grade of " .. stat:upper() .. " set to " .. new .. " for " .. targetChar:GetName())
+		local targetPly = targetChar:GetPlayer()
+		client:Notify(("Adjusted %s grade for %s: %d → %d ( %+d )"):format(stat:upper(), targetChar:GetName(), old, new, amount))
+		if IsValid(targetPly) then
+			targetPly:Notify(("Your %s grade was adjusted: %d → %d ( %+d )"):format(stat:upper(), old, new, amount))
+		end
 	end
 })
 

@@ -564,7 +564,7 @@ net.Receive("ixVeritasSubmitAttack", function(len, ply)
 	print("  Stat:", stat, " | Bonus:", bonus, " | Shots:", shotCount)
 
 	-- Proceed to combat
-	plugin:ResolveCombat(ply, target, stat, nil, bonus, shotCount)
+	plugin:ResolveCombat(ply, target, stat, nil, bonus, shotCount, nil, slot)
 end)
 
 local pendingDefenses = {} -- key = callback ID, value = data for pending attack
@@ -596,7 +596,8 @@ net.Receive("ixVeritasDefenseResponse", function(len, ply)
 		stat, -- defender stat from UI
 		pending.attackBonus,
 		pending.shotCount,
-		bonus  -- defender bonus from UI
+		bonus,                   -- defender bonus
+		pending.atkSlot          -- the original chosen slot
 	)
 end)
 
@@ -619,5 +620,5 @@ net.Receive("ixVeritasNpcAttack", function(len, ply)
 		return
 	end
 
-	PLUGIN:ResolveCombat(attacker, defender, atkStat, nil, atkBonus, shotCount)
+	PLUGIN:ResolveCombat(attacker, defender, atkStat, nil, atkBonus, shotCount, nil, nil)
 end)

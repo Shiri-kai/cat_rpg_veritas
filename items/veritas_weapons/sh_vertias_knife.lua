@@ -4,6 +4,7 @@ ITEM.model = "models/weapons/w_knife_ct.mdl"
 ITEM.width = 1
 ITEM.height = 1
 ITEM.category = "Veritas Weapons"
+ITEM.class = "cat_custom_knife"
 ITEM.weaponSlot = "melee"
 
 ITEM.weaponTraits = {

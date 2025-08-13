@@ -4,6 +4,7 @@ ITEM.model = "models/weapons/w_rif_m4a1.mdl"
 ITEM.width = 1
 ITEM.height = 1
 ITEM.category = "Veritas Weapons"
+ITEM.class = "cat_custom_autogun"
 ITEM.weaponSlot = "primary"
 
 ITEM.weaponTraits = {
